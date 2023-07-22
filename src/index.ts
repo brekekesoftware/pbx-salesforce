@@ -24,6 +24,7 @@ setupOpenCti().then(() => {
        fireCallInfoEvent,
        fireLogSavedEvent,
        fireMakeCallEvent,
+       onCallRecordedEvent,
        onCallUpdatedEvent,
        onCallEndedEvent,
        onLoggedOutEvent,
@@ -31,6 +32,10 @@ setupOpenCti().then(() => {
        onCallEvent,
        onLogEvent,
      }) => {
+      let currentCall: Call | undefined;
+
+      const callRecordingURLs = new Map<string, string>();
+
       // add click-to-call listener
       sforce.opencti.onClickToDial({
         listener: (payload) => {
@@ -38,8 +43,6 @@ setupOpenCti().then(() => {
           fireMakeCallEvent(String(payload.number));
         },
       });
-
-      let currentCall: Call | undefined;
 
       sforce.opencti.onNavigationChange({
         listener: (payload) => {
@@ -60,17 +63,18 @@ setupOpenCti().then(() => {
 
       onLoggedOutEvent(() => {
         currentCall = undefined;
+        callRecordingURLs.clear();
         sforce.opencti.disableClickToDial({ callback: () => console.log('disableClickToDial') });
       });
 
-      onCallUpdatedEvent(({ call }) => void (currentCall = call));
-      onCallEndedEvent(({ call }) => {
+      onCallUpdatedEvent(call => void (currentCall = call));
+      onCallEndedEvent(call => {
         if (call.id === currentCall?.id) {
           currentCall = undefined;
         }
       });
 
-      onCallEvent(({ call }) => {
+      onCallEvent(call => {
         console.log('onCallEvent', call);
         sforce.opencti.setSoftphonePanelVisibility({ visible: true });
         sforce.opencti.searchAndScreenPop({
@@ -108,7 +112,12 @@ setupOpenCti().then(() => {
         });
       });
 
-      onLogEvent(({ log }) => {
+      onCallRecordedEvent(record => {
+        console.log('onCallRecordedEvent', record);
+        callRecordingURLs.set(record.roomId, record.recordingId);
+      });
+
+      onLogEvent(log => {
         console.log('logEvent', log);
         const call = log.call;
         sforce.opencti.saveLog({
@@ -117,7 +126,7 @@ setupOpenCti().then(() => {
             Status: 'completed',
             CallType: call.incoming ? 'Inbound' : 'Outbound',
             // ActivityDate: formatDate(new Date(call.createdAt)),
-            CallObject: `${log.tenant} ${call.pbxRoomId} ${log.user}`,
+            CallObject: callRecordingURLs.get(call.pbxRoomId),
             Phone: call.partyNumber,
             Description: log.comment,
             CallDisposition: log.result,
@@ -130,6 +139,7 @@ setupOpenCti().then(() => {
             console.log('saveLog response', response);
             if (response.success) {
               fireLogSavedEvent(log);
+              callRecordingURLs.delete(call.pbxRoomId);
               sforce.opencti.refreshView();
             }
           },
