@@ -73,13 +73,13 @@ interface OpenCTI {
     params: {}; // TODO
   }) => void;
   SCREENPOP_TYPE: {
-    SOBJECT: string;
-    URL: string;
-    OBJECTHOME: string;
-    LIST: string;
-    SEARCH: string;
-    NEW_RECORD_MODAL: string;
-    FLOW: string;
+    SOBJECT;
+    URL;
+    OBJECTHOME;
+    LIST;
+    SEARCH;
+    NEW_RECORD_MODAL;
+    FLOW;
   };
   searchAndScreenPop: (params: {
     searchParams: string;

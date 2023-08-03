@@ -1,4 +1,6 @@
+import { SearchResult } from '@/opencti';
 import { Call } from '@core/types/phone';
+import { Contact } from '@core/types/events';
 
 const setupOpenCti = () => {
   return new Promise<void>((resolve) => {
@@ -31,6 +33,7 @@ setupOpenCti().then(() => {
        onLoggedInEvent,
        onCallEvent,
        onLogEvent,
+       onContactSelectedEvent,
      }) => {
       let currentCall: Call | undefined;
 
@@ -89,27 +92,49 @@ setupOpenCti().then(() => {
           },
           callback: response => {
             console.log('searchAndScreenPop', response);
-            if (response.success && Object.keys(response.returnValue!).length === 1) {
-              const recordId = Object.keys(response.returnValue!)[0];
 
-              const record = response.returnValue![recordId];
+            const mapContactResult = (contact: SearchResult): Contact => ({
+              id: contact.Id,
+              name: contact.Name,
+              type: contact.RecordType,
+            });
 
-              fireCallInfoEvent(call, {
-                id: record.Id,
-                name: formatRecordName(record.Name, record.RecordType),
-              });
-
-              // sforce.opencti.screenPop({
-              //   type: sforce.opencti.SCREENPOP_TYPE.SOBJECT,
-              //   params: {
-              //     recordId,
-              //     recordName: response.returnValue![recordId],
-              //     objectType: 'Contact',
-              //   },
-              // });
+            if (response.success) {
+              fireCallInfoEvent(call, Object.values(response.returnValue!).map(mapContactResult));
             }
+
+            // if (response.success && Object.keys(response.returnValue!).length === 1) {
+            //   const recordId = Object.keys(response.returnValue!)[0];
+            //
+            //   const record = response.returnValue![recordId];
+            //
+            //   fireCallInfoEvent(call, {
+            //     id: record.Id,
+            //     name: formatRecordName(record.Name, record.RecordType),
+            //   });
+            //
+            //   // sforce.opencti.screenPop({
+            //   //   type: sforce.opencti.SCREENPOP_TYPE.SOBJECT,
+            //   //   params: {
+            //   //     recordId,
+            //   //     recordName: response.returnValue![recordId],
+            //   //     objectType: 'Contact',
+            //   //   },
+            //   // });
+            // }
           },
         });
+      });
+
+      onContactSelectedEvent(({ contact }) => {
+          sforce.opencti.screenPop({
+            type: sforce.opencti.SCREENPOP_TYPE.SOBJECT,
+            params: {
+              recordId: contact.id,
+              // recordName: response.returnValue![recordId],
+              // objectType: 'Contact',
+            },
+          });
       });
 
       onCallRecordedEvent(record => {
@@ -117,6 +142,7 @@ setupOpenCti().then(() => {
         callRecordingURLs.set(record.roomId, record.recordingId);
       });
 
+      // TODO Account seems to have issue
       onLogEvent(log => {
         console.log('logEvent', log);
         const call = log.call;
