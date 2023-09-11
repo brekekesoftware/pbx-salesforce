@@ -11,7 +11,7 @@ const setupOpenCti = () => {
     const script = document.createElement('script');
     script.src = scriptSrc;
     script.onload = () => {
-      console.log('opencti ready');
+      logger('opencti ready');
       resolve();
     };
 
@@ -42,14 +42,14 @@ setupOpenCti().then(() => {
       // add click-to-call listener
       sforce.opencti.onClickToDial({
         listener: (payload) => {
-          console.log('clickToDial', payload);
+          logger('clickToDial', payload);
           fireMakeCallEvent(String(payload.number));
         },
       });
 
       sforce.opencti.onNavigationChange({
         listener: (payload) => {
-          console.log('onNavigationChange', payload);
+          logger('onNavigationChange', payload);
 
           if (currentCall && payload.objectType) {
             fireCallInfoEvent(currentCall, {
@@ -61,14 +61,14 @@ setupOpenCti().then(() => {
       });
 
       onLoggedInEvent(() => {
-        sforce.opencti.enableClickToDial({ callback: () => console.log('enableClickToDial') });
+        sforce.opencti.enableClickToDial({ callback: () => logger('enableClickToDial') });
       });
 
       onLoggedOutEvent(() => {
         currentCall = undefined;
         callRecordingURLs.clear();
         calls.length = 0;
-        sforce.opencti.disableClickToDial({ callback: () => console.log('disableClickToDial') });
+        sforce.opencti.disableClickToDial({ callback: () => logger('disableClickToDial') });
       });
 
       onCallEvent(call => void (currentCall = call));
@@ -79,7 +79,7 @@ setupOpenCti().then(() => {
       });
 
       onCallUpdatedEvent(call => {
-        console.log('onCallEvent', call);
+        logger('onCallEvent', call);
 
         if (calls.includes(call.pbxRoomId)) return;
         calls.push(call.pbxRoomId);
@@ -96,7 +96,7 @@ setupOpenCti().then(() => {
             // FirstName: call.getDisplayName(),
           },
           callback: response => {
-            console.log('searchAndScreenPop', response);
+            logger('searchAndScreenPop', response);
 
             const mapContactResult = (contact: SearchResult): Contact => ({
               id: contact.Id,
@@ -143,13 +143,13 @@ setupOpenCti().then(() => {
       });
 
       onCallRecordedEvent(record => {
-        console.log('onCallRecordedEvent', record);
+        logger('onCallRecordedEvent', record);
         callRecordingURLs.set(record.roomId, record.recordingId);
       });
 
       // TODO Account seems to have issue
       onLogEvent(log => {
-        console.log('logEvent', log);
+        logger('logEvent', log);
         const call = log.call;
         sforce.opencti.saveLog({
           value: {
@@ -167,7 +167,7 @@ setupOpenCti().then(() => {
             entityApiName: 'Task',
           },
           callback: (response) => {
-            console.log('saveLog response', response);
+            logger('saveLog response', response);
             if (response.success) {
               fireLogSavedEvent(log);
               callRecordingURLs.delete(call.pbxRoomId);
@@ -184,4 +184,14 @@ const formatRecordName = (name: string, type: string) => `[${type}] ${name}`;
 
 const formatDate = (date: Date) => {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+};
+
+const logName = 'brekeke-widget:salesforce';
+const logger = (...args: unknown[]) => {
+  if (!location.host.startsWith('localhost') && !location.host.startsWith('127.0.0.1')) return;
+  if (typeof args[0] === 'string' && args[0].includes('error')) {
+    console.error(logName, ...args);
+    return;
+  }
+  console.log(logName, ...args);
 };
