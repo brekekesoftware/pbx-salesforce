@@ -36,7 +36,7 @@ setupOpenCti().then(() => {
        onContactSelectedEvent,
      }) => {
       let currentCall: Call | undefined;
-
+      const calls: string[] = [];
       const callRecordingURLs = new Map<string, string>();
 
       // add click-to-call listener
@@ -67,18 +67,23 @@ setupOpenCti().then(() => {
       onLoggedOutEvent(() => {
         currentCall = undefined;
         callRecordingURLs.clear();
+        calls.length = 0;
         sforce.opencti.disableClickToDial({ callback: () => console.log('disableClickToDial') });
       });
 
-      onCallUpdatedEvent(call => void (currentCall = call));
+      onCallEvent(call => void (currentCall = call));
       onCallEndedEvent(call => {
-        if (call.id === currentCall?.id) {
+        if (call.pbxRoomId === currentCall?.pbxRoomId) {
           currentCall = undefined;
         }
       });
 
-      onCallEvent(call => {
+      onCallUpdatedEvent(call => {
         console.log('onCallEvent', call);
+
+        if (calls.includes(call.pbxRoomId)) return;
+        calls.push(call.pbxRoomId);
+
         sforce.opencti.setSoftphonePanelVisibility({ visible: true });
         sforce.opencti.searchAndScreenPop({
           searchParams: call.partyNumber,
