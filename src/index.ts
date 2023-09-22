@@ -196,6 +196,13 @@ setupOpenCti().then(() => {
             if (response.success) {
               fireLogSavedEvent(log);
               sforce.opencti.refreshView();
+            } else {
+              fireNotification({ message: 'An error occurred', type: 'error' });
+              const error = response.errors?.[0];
+              if (error) {
+                const message = typeof error === 'string' ? error : error.description;
+                logger('saveLog error', message);
+              }
             }
           },
         });

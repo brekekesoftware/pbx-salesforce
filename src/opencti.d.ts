@@ -4,7 +4,7 @@ type Listener<T> = (payload: T) => void;
 interface CallbackResponse<T> {
   success: boolean;
   returnValue?: T;
-  errors?: string[];
+  errors?: string[] | { code: string; description: string; details: { message: string } }[];
 }
 
 type SearchResult = {
