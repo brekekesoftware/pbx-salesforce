@@ -24,9 +24,10 @@ setupOpenCti().then(() => {
     document.getElementById('widget_embed_div')!,
     ({
        fireCallInfoEvent,
+       fireConfigEvent,
        fireLogSavedEvent,
        fireMakeCallEvent,
-       onCallRecordedEvent,
+       fireNotification,
        onCallUpdatedEvent,
        onCallEndedEvent,
        onLoggedOutEvent,
@@ -37,7 +38,6 @@ setupOpenCti().then(() => {
      }) => {
       let currentCall: Call | undefined;
       const calls: string[] = [];
-      const callRecordingURLs = new Map<string, string>();
 
       // add click-to-call listener
       sforce.opencti.onClickToDial({
@@ -45,6 +45,28 @@ setupOpenCti().then(() => {
           logger('clickToDial', payload);
           fireMakeCallEvent(String(payload.number));
         },
+      });
+
+      fireConfigEvent({
+        logInputs: [
+          {
+            label: 'Subject',
+            name: 'subject',
+            type: 'text',
+            required: true,
+            defaultValue: call => `Call on ${new Date(call.createdAt).toUTCString()}`,
+          },
+          {
+            label: 'Description',
+            name: 'description',
+            type: 'textarea',
+          },
+          {
+            label: 'Result',
+            name: 'result',
+            type: 'text',
+          },
+        ],
       });
 
       sforce.opencti.onNavigationChange({
@@ -66,7 +88,6 @@ setupOpenCti().then(() => {
 
       onLoggedOutEvent(() => {
         currentCall = undefined;
-        callRecordingURLs.clear();
         calls.length = 0;
         sforce.opencti.disableClickToDial({ callback: () => logger('disableClickToDial') });
       });
@@ -81,8 +102,9 @@ setupOpenCti().then(() => {
       onCallUpdatedEvent(call => {
         logger('onCallEvent', call);
 
-        if (calls.includes(call.pbxRoomId)) return;
-        calls.push(call.pbxRoomId);
+        const callId = `${call.pbxRoomId}-${call.id}`;
+        if (calls.includes(callId)) return;
+        calls.push(callId);
 
         sforce.opencti.setSoftphonePanelVisibility({ visible: true });
         sforce.opencti.searchAndScreenPop({
@@ -100,7 +122,7 @@ setupOpenCti().then(() => {
 
             const mapContactResult = (contact: SearchResult): Contact => ({
               id: contact.Id,
-              name: contact.Name,
+              name: formatRecordName(contact.Name, contact.RecordType),
               type: contact.RecordType,
             });
 
@@ -142,35 +164,37 @@ setupOpenCti().then(() => {
           });
       });
 
-      onCallRecordedEvent(record => {
-        logger('onCallRecordedEvent', record);
-        callRecordingURLs.set(record.roomId, record.recordingId);
-      });
-
       // TODO Account seems to have issue
       onLogEvent(log => {
         logger('logEvent', log);
+
+        if (!log.contactId) {
+          fireNotification({ type: 'error', message: 'This call was not associated with a contact.' });
+          return;
+        }
+
         const call = log.call;
+        const { subject, description, result } = log.inputs;
+
         sforce.opencti.saveLog({
           value: {
-            Subject: log.subject,
+            Subject: subject,
+            Description: description,
+            CallDisposition: result,
             Status: 'completed',
             CallType: call.incoming ? 'Inbound' : 'Outbound',
             // ActivityDate: formatDate(new Date(call.createdAt)),
-            CallObject: callRecordingURLs.get(call.pbxRoomId),
+            CallObject: log.recording?.url,
             Phone: call.partyNumber,
-            Description: log.comment,
-            CallDisposition: log.result,
             CallDurationInSeconds: call.getDuration() / 1000,
-            WhoId: log.recordId,
-            WhatId: log.relatedRecordId,
+            WhoId: log.contactId,
+            WhatId: log.related?.id,
             entityApiName: 'Task',
           },
           callback: (response) => {
             logger('saveLog response', response);
             if (response.success) {
               fireLogSavedEvent(log);
-              callRecordingURLs.delete(call.pbxRoomId);
               sforce.opencti.refreshView();
             }
           },
@@ -180,7 +204,7 @@ setupOpenCti().then(() => {
   );
 });
 
-const formatRecordName = (name: string, type: string) => `[${type}] ${name}`;
+const formatRecordName = (name: string, type: string) => `${name} [${type}]`;
 
 const formatDate = (date: Date) => {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
