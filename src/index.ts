@@ -120,12 +120,6 @@ setupOpenCti().then(() => {
           callback: response => {
             logger('searchAndScreenPop', response);
 
-            const mapContactResult = (contact: SearchResult): Contact => ({
-              id: contact.Id,
-              name: formatRecordName(contact.Name, contact.RecordType),
-              type: contact.RecordType,
-            });
-
             if (response.success) {
               fireCallInfoEvent(call, Object.values(response.returnValue!).map(mapContactResult));
             }
@@ -212,6 +206,12 @@ setupOpenCti().then(() => {
 });
 
 const formatRecordName = (name: string, type: string) => `${name} [${type}]`;
+
+const mapContactResult = (contact: SearchResult): Contact => ({
+  id: contact.Id,
+  name: formatRecordName(contact.Name, contact.RecordType),
+  type: contact.RecordType,
+});
 
 const formatDate = (date: Date) => {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
