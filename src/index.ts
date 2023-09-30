@@ -69,18 +69,18 @@ setupOpenCti().then(() => {
         ],
       });
 
-      sforce.opencti.onNavigationChange({
-        listener: (payload) => {
-          logger('onNavigationChange', payload);
-
-          if (currentCall && payload.objectType) {
-            fireCallInfoEvent(currentCall, {
-              id: payload.recordId,
-              name: formatRecordName(payload.recordName, payload.objectType),
-            });
-          }
-        },
-      });
+      // sforce.opencti.onNavigationChange({
+      //   listener: (payload) => {
+      //     logger('onNavigationChange', payload);
+      //
+      //     if (currentCall && payload.objectType) {
+      //       fireCallInfoEvent(currentCall, {
+      //         id: payload.recordId,
+      //         name: formatRecordName(payload.recordName, payload.objectType),
+      //       });
+      //     }
+      //   },
+      // });
 
       onLoggedInEvent(() => {
         sforce.opencti.enableClickToDial({ callback: () => logger('enableClickToDial') });
