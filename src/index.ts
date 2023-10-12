@@ -36,8 +36,8 @@ setupOpenCti().then(() => {
        onLogEvent,
        onContactSelectedEvent,
      }) => {
-      let currentCall: Call | undefined;
-      const calls: string[] = [];
+      const calls = new Map<string, Call>();
+      const callsResult = new Map<string, boolean>();
 
       // add click-to-call listener
       sforce.opencti.onClickToDial({
@@ -69,42 +69,56 @@ setupOpenCti().then(() => {
         ],
       });
 
-      // sforce.opencti.onNavigationChange({
-      //   listener: (payload) => {
-      //     logger('onNavigationChange', payload);
-      //
-      //     if (currentCall && payload.objectType) {
-      //       fireCallInfoEvent(currentCall, {
-      //         id: payload.recordId,
-      //         name: formatRecordName(payload.recordName, payload.objectType),
-      //       });
-      //     }
-      //   },
-      // });
+      sforce.opencti.onNavigationChange({
+        listener: (payload) => {
+          logger('onNavigationChange', payload);
+
+          const { objectType, recordId, recordName } = payload;
+
+          if (objectType && recordId && recordName) {
+            calls.forEach(call => {
+              const id = callId(call);
+              // cancel if phone search had positive results.
+              if (callsResult.get(id)) return;
+
+              const interval = setInterval(() => {
+                // cancel interval if phone search has been completed
+                if (callsResult.has(id)) clearInterval(interval);
+
+                // cancel if phone search had positive results.
+                if (callsResult.get(id)) return;
+
+                // add contact if phone search had negative results.
+                fireCallInfoEvent(call, {
+                  id: recordId,
+                  name: formatRecordName(recordName, objectType),
+                  type: objectType,
+                });
+              }, 1000);
+            });
+          }
+        },
+      });
 
       onLoggedInEvent(() => {
         sforce.opencti.enableClickToDial({ callback: () => logger('enableClickToDial') });
       });
 
       onLoggedOutEvent(() => {
-        currentCall = undefined;
-        calls.length = 0;
+        callsResult.clear();
+        calls.clear();
         sforce.opencti.disableClickToDial({ callback: () => logger('disableClickToDial') });
       });
 
-      onCallEvent(call => void (currentCall = call));
-      onCallEndedEvent(call => {
-        if (call.pbxRoomId === currentCall?.pbxRoomId) {
-          currentCall = undefined;
-        }
-      });
+      onCallEvent(call => void 0);
+      onCallEndedEvent(call => calls.delete(callId(call)));
 
       onCallUpdatedEvent(call => {
         logger('onCallEvent', call);
 
-        const callId = `${call.pbxRoomId}-${call.id}`;
-        if (calls.includes(callId)) return;
-        calls.push(callId);
+        const id = callId(call);
+        if (calls.has(id)) return;
+        calls.set(id, call);
 
         sforce.opencti.setSoftphonePanelVisibility({ visible: true });
         sforce.opencti.searchAndScreenPop({
@@ -120,8 +134,14 @@ setupOpenCti().then(() => {
           callback: response => {
             logger('searchAndScreenPop', response);
 
-            if (response.success) {
-              fireCallInfoEvent(call, Object.values(response.returnValue!).map(mapContactResult));
+            const { success, returnValue } = response;
+
+            const hasData = success && Object.keys(returnValue!).length > 0;
+
+            callsResult.set(id, hasData);
+
+            if (hasData) {
+              fireCallInfoEvent(call, Object.values(returnValue!).map(mapContactResult));
             }
 
             // if (response.success && Object.keys(response.returnValue!).length === 1) {
@@ -212,6 +232,8 @@ const mapContactResult = (contact: SearchResult): Contact => ({
   name: formatRecordName(contact.Name, contact.RecordType),
   type: contact.RecordType,
 });
+
+const callId = (call: Call) => `${call.pbxRoomId}-${call.id}`;
 
 const formatDate = (date: Date) => {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
