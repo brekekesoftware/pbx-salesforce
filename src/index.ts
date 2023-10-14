@@ -143,42 +143,21 @@ setupOpenCti().then(() => {
             if (hasData) {
               fireCallInfoEvent(call, Object.values(returnValue!).map(mapContactResult));
             }
-
-            // if (response.success && Object.keys(response.returnValue!).length === 1) {
-            //   const recordId = Object.keys(response.returnValue!)[0];
-            //
-            //   const record = response.returnValue![recordId];
-            //
-            //   fireCallInfoEvent(call, {
-            //     id: record.Id,
-            //     name: formatRecordName(record.Name, record.RecordType),
-            //   });
-            //
-            //   // sforce.opencti.screenPop({
-            //   //   type: sforce.opencti.SCREENPOP_TYPE.SOBJECT,
-            //   //   params: {
-            //   //     recordId,
-            //   //     recordName: response.returnValue![recordId],
-            //   //     objectType: 'Contact',
-            //   //   },
-            //   // });
-            // }
           },
         });
       });
 
       onContactSelectedEvent(({ contact }) => {
-          sforce.opencti.screenPop({
-            type: sforce.opencti.SCREENPOP_TYPE.SOBJECT,
-            params: {
-              recordId: contact.id,
-              // recordName: response.returnValue![recordId],
-              // objectType: 'Contact',
-            },
-          });
+        sforce.opencti.screenPop({
+          type: sforce.opencti.SCREENPOP_TYPE.SOBJECT,
+          params: {
+            recordId: contact.id,
+            // recordName: response.returnValue![recordId],
+            // objectType: 'Contact',
+          },
+        });
       });
 
-      // TODO Account seems to have issue
       onLogEvent(log => {
         logger('logEvent', log);
 
@@ -190,21 +169,29 @@ setupOpenCti().then(() => {
         const call = log.call;
         const { subject, description, result } = log.inputs;
 
+        const value = {
+          Subject: subject,
+          Description: description,
+          CallDisposition: result,
+          Status: 'completed',
+          CallType: call.incoming ? 'Inbound' : 'Outbound',
+          // ActivityDate: formatDate(new Date(call.createdAt)),
+          CallObject: log.recording?.url,
+          Phone: call.partyNumber,
+          CallDurationInSeconds: call.getDuration() / 1000,
+          WhoId: log.contactId,
+          WhatId: log.related?.id,
+          entityApiName: 'Task',
+        };
+
+        if (['Account', 'account'].includes(log.contactType!)) {
+          // @ts-ignore
+          delete value['WhoId'];
+          value['WhatId'] = log.contactId;
+        }
+
         sforce.opencti.saveLog({
-          value: {
-            Subject: subject,
-            Description: description,
-            CallDisposition: result,
-            Status: 'completed',
-            CallType: call.incoming ? 'Inbound' : 'Outbound',
-            // ActivityDate: formatDate(new Date(call.createdAt)),
-            CallObject: log.recording?.url,
-            Phone: call.partyNumber,
-            CallDurationInSeconds: call.getDuration() / 1000,
-            WhoId: log.contactId,
-            WhatId: log.related?.id,
-            entityApiName: 'Task',
-          },
+          value,
           callback: (response) => {
             logger('saveLog response', response);
             if (response.success) {
