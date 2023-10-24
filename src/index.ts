@@ -176,7 +176,7 @@ setupOpenCti().then(() => {
           Status: 'completed',
           CallType: call.incoming ? 'Inbound' : 'Outbound',
           // ActivityDate: formatDate(new Date(call.createdAt)),
-          CallObject: log.recording?.url,
+          CallObject: log.recording?.id,
           Phone: call.partyNumber,
           CallDurationInSeconds: call.getDuration() / 1000,
           WhoId: log.contactId,
