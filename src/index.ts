@@ -25,6 +25,7 @@ setupOpenCti().then(() => {
     ({
        fireCallInfoEvent,
        fireConfigEvent,
+       fireLogFailedEvent,
        fireLogSavedEvent,
        fireMakeCallEvent,
        fireNotification,
@@ -198,6 +199,7 @@ setupOpenCti().then(() => {
               fireLogSavedEvent(log);
               sforce.opencti.refreshView();
             } else {
+              fireLogFailedEvent(log);
               fireNotification({ message: 'An error occurred', type: 'error' });
               const error = response.errors?.[0];
               if (error) {
