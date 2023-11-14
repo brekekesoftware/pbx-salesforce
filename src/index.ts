@@ -70,17 +70,43 @@ setupOpenCti().then(() => {
         ],
       });
 
+      let currentURL = document.referrer;
+
+      let queue: { call: Call, SCREEN_POP_DATA: never }[] = [];
+
+      const runQueue = () => {
+        if (queue.length !== 0) {
+          const [{ SCREEN_POP_DATA }, ...rest] = queue;
+          queue = rest;
+          sforce.opencti.screenPop(SCREEN_POP_DATA);
+        }
+      };
+
       sforce.opencti.onNavigationChange({
         listener: (payload) => {
+          const { url } = payload;
+
+          if (currentURL === url) return;
+          const prevURL = currentURL;
+          currentURL = url;
+
           logger('onNavigationChange', payload);
+
+          if (isNewContactModal(url)) return;
+
+          // if current page [url] was the background page of a dismissed new-contact modal page [prevURL].
+          const wasBackgroundPage = isNewContactModal(prevURL) && isPath(url, newContactBackgroundPagePath(prevURL));
 
           const { objectType, recordId, recordName } = payload;
 
-          if (objectType && recordId && recordName) {
+          if (objectType && recordId && recordName && !wasBackgroundPage) {
             calls.forEach(call => {
               const id = callId(call);
               // cancel if phone search had positive results.
               if (callsResult.get(id)) return;
+
+              // cancel if call is in new contact queue.
+              if (queue.some(q => callId(q.call) === id)) return;
 
               const interval = setInterval(() => {
                 // cancel interval if phone search has been completed
@@ -98,6 +124,8 @@ setupOpenCti().then(() => {
               }, 1000);
             });
           }
+
+          runQueue();
         },
       });
 
@@ -108,6 +136,7 @@ setupOpenCti().then(() => {
       onLoggedOutEvent(() => {
         callsResult.clear();
         calls.clear();
+        queue.length = 0;
         sforce.opencti.disableClickToDial({ callback: () => logger('disableClickToDial') });
       });
 
@@ -124,7 +153,7 @@ setupOpenCti().then(() => {
         sforce.opencti.setSoftphonePanelVisibility({ visible: true });
         sforce.opencti.searchAndScreenPop({
           searchParams: call.partyNumber,
-          deferred: false,
+          deferred: true,
           callType: call.incoming ? sforce.opencti.CALL_TYPE.INBOUND : sforce.opencti.CALL_TYPE.OUTBOUND,
           // callType: sforce.opencti.CALL_TYPE.INTERNAL,
           defaultFieldValues: {
@@ -136,13 +165,23 @@ setupOpenCti().then(() => {
             logger('searchAndScreenPop', response);
 
             const { success, returnValue } = response;
+            // @ts-ignore
+            const { SCREEN_POP_DATA, ...data } = returnValue;
 
-            const hasData = success && Object.keys(returnValue!).length > 0;
+            const hasData = success && Object.keys(data).length > 0;
 
             callsResult.set(id, hasData);
 
             if (hasData) {
-              fireCallInfoEvent(call, Object.values(returnValue!).map(mapContactResult));
+              fireCallInfoEvent(call, Object.values(data).map(mapContactResult));
+            }
+
+            // put new contacts modal opening in queue if a new contact modal is currently opened or queued.
+            if (success && !hasData && (queue.length !== 0 || isNewContactModal(currentURL))) {
+              // @ts-ignore
+              queue.push({ call, SCREEN_POP_DATA });
+            } else {
+              sforce.opencti.screenPop(SCREEN_POP_DATA);
             }
           },
         });
@@ -213,6 +252,10 @@ setupOpenCti().then(() => {
     },
   );
 });
+
+const isPath = (url: string, path?: string | null) => new URL(url).pathname === path;
+const isNewContactModal = (url: string) => isPath(url, '/lightning/o/Contact/new');
+const newContactBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext');
 
 const formatRecordName = (name: string, type: string) => `${name} [${type}]`;
 
