@@ -77,9 +77,16 @@ setupOpenCti().then(() => {
       const runQueue = () => {
         if (queue.length !== 0) {
           const [{ SCREEN_POP_DATA }, ...rest] = queue;
-          queue = rest;
+          // queue = rest;
           sforce.opencti.screenPop(SCREEN_POP_DATA);
         }
+      };
+
+      const removeCurrentQueuedCall = () => {
+        const [object, ...rest] = queue;
+        queue = rest;
+
+        return object;
       };
 
       sforce.opencti.onNavigationChange({
@@ -94,11 +101,34 @@ setupOpenCti().then(() => {
 
           if (isNewContactModal(url)) return;
 
+          const prevURLWasNewContact = isNewContactModal(prevURL);
           // if current page [url] was the background page of a dismissed new-contact modal page [prevURL].
-          const wasBackgroundPage = isNewContactModal(prevURL) && isPath(url, newContactBackgroundPagePath(prevURL));
+          const wasBackgroundPage = prevURLWasNewContact && isPath(url, newContactBackgroundPagePath(prevURL));
+
+          const cancelled = wasBackgroundPage;
+          const saved = prevURLWasNewContact && !isPath(url, newContactBackgroundPagePath(prevURL));
 
           const { objectType, recordId, recordName } = payload;
 
+          if (queue.length === 0) return;
+
+          if (cancelled) {
+            removeCurrentQueuedCall();
+          }
+
+          if (saved) {
+            const { call } = removeCurrentQueuedCall();
+
+            fireCallInfoEvent(call, {
+              id: recordId,
+              name: formatRecordName(recordName, objectType),
+              type: objectType,
+            });
+          }
+
+          runQueue();
+
+          return;
           if (objectType && recordId && recordName && !wasBackgroundPage) {
             calls.forEach(call => {
               const id = callId(call);
@@ -124,8 +154,6 @@ setupOpenCti().then(() => {
               }, 1000);
             });
           }
-
-          runQueue();
         },
       });
 
@@ -176,13 +204,24 @@ setupOpenCti().then(() => {
               fireCallInfoEvent(call, Object.values(data).map(mapContactResult));
             }
 
-            // put new contacts modal opening in queue if a new contact modal is currently opened or queued.
-            if (success && !hasData && (queue.length !== 0 || isNewContactModal(currentURL))) {
+            const newContact = !hasData;
+
+            if (newContact) {
               // @ts-ignore
               queue.push({ call, SCREEN_POP_DATA });
-            } else {
-              sforce.opencti.screenPop(SCREEN_POP_DATA);
             }
+
+            if (newContact && isNewContactModal(currentURL)) return;
+
+            sforce.opencti.screenPop(SCREEN_POP_DATA);
+
+            // // put new contacts modal opening in queue if a new contact modal is currently opened or queued.
+            // if (success && !hasData && (queue.length !== 0 || isNewContactModal(currentURL))) {
+            //   // @ts-ignore
+            //   queue.push({ call, SCREEN_POP_DATA });
+            // } else {
+            //   sforce.opencti.screenPop(SCREEN_POP_DATA);
+            // }
           },
         });
       });
