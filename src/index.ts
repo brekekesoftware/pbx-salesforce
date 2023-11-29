@@ -227,7 +227,7 @@ setupOpenCti().then(() => {
 
           // put new contacts in queue so that they can be processed on navigation changes.
           if (isNewContact) {
-            canPopNew = queue.length === 0 && !isNewContactModal(currentURL);
+            canPopNew = queue.filter(({ opened }) => !opened).length === 0 && !isNewContactModal(currentURL);
             // @ts-ignore
             queue.push({ call, SCREEN_POP_DATA, opened: canPopNew, current: canPopNew });
           }
