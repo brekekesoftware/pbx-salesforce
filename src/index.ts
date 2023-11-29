@@ -138,18 +138,27 @@ setupOpenCti().then(() => {
 
       sforce.opencti.onNavigationChange({
         listener: (payload) => {
+          logger('onNavigationChange', payload);
           const { url } = payload;
 
-          if (currentURL === url) return;
+          if (currentURL === url) {
+            logger('onNavigationChange exit: same URL', { currentURL, url });
+            return;
+          }
+
           const prevURL = currentURL;
           currentURL = url;
 
-          logger('onNavigationChange', payload);
-
-          if (queue.length === 0 || isNewContactModal(url)) return;
+          if (queue.length === 0 || isNewContactModal(url)) {
+            logger('onNavigationChange exit: empty queue or modal', { queue, url });
+            return;
+          }
 
           const prevURLWasNewContact = isNewContactModal(prevURL);
-          if (!prevURLWasNewContact) return;
+          if (!prevURLWasNewContact) {
+            logger('onNavigationChange exit: prevURL was not modal', { prevURL });
+            return;
+          }
 
           // if current page [url] was the background page of a dismissed new-contact modal page [prevURL].
           // const cancelled = isPath(url, newContactBackgroundPagePath(prevURL));
@@ -177,6 +186,7 @@ setupOpenCti().then(() => {
             if (!opened) return;
 
             search(call, (call, SCREEN_POP_DATA, hasData) => {
+              logger('queue search', { hasData, SCREEN_POP_DATA, call });
               if (!hasData) return;
               removeCallFromQueue(call);
             }, true);
@@ -203,10 +213,14 @@ setupOpenCti().then(() => {
         logger('onCallEvent', call);
 
         const id = callId(call);
-        if (calls.has(id)) return;
+        if (calls.has(id)) {
+          logger('onCallUpdatedEvent exit: id exists', { call, id });
+          return;
+        }
         calls.set(id, call);
 
         search(call, (call, SCREEN_POP_DATA, hasData) => {
+          logger('onCallUpdatedEvent search callback', { call, SCREEN_POP_DATA, hasData });
           const isNewContact = !hasData;
 
           let canPopNew = false;
@@ -217,6 +231,8 @@ setupOpenCti().then(() => {
             // @ts-ignore
             queue.push({ call, SCREEN_POP_DATA, opened: canPopNew, current: canPopNew });
           }
+
+          logger('onCallUpdatedEvent', { isNewContact, canPopNew, queue, call });
 
           // don't screen pop if a new contact modal is currently opened or queued.
           if (isNewContact && !canPopNew) return;
