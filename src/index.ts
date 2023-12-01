@@ -73,6 +73,7 @@ setupOpenCti().then(() => {
       let currentURL = document.referrer;
 
       let queue: { call: Call, SCREEN_POP_DATA: never, opened: boolean, current: boolean }[] = [];
+      const queuedSearch = new Map<string, NodeJS.Timer>;
 
       const removeCallFromQueue = (call: Call) => {
         queue = queue.filter(value => callId(call) !== callId(value.call));
@@ -106,7 +107,9 @@ setupOpenCti().then(() => {
       const search = (call: Call, callback: (call: Call, SCREEN_POP_DATA: any, hasData: boolean) => void, isNew: boolean = false) => {
         logger('search', { call, isNew });
 
-        sforce.opencti.setSoftphonePanelVisibility({ visible: !isNew });
+        if (!isNew) {
+          sforce.opencti.setSoftphonePanelVisibility({ visible: true });
+        }
 
         sforce.opencti.searchAndScreenPop({
           searchParams: call.partyNumber,
@@ -161,35 +164,60 @@ setupOpenCti().then(() => {
           }
 
           // if current page [url] was the background page of a dismissed new-contact modal page [prevURL].
-          // const cancelled = isPath(url, newContactBackgroundPagePath(prevURL));
-          // const saved = !isPath(url, newContactBackgroundPagePath(prevURL));
-          //
-          // const { objectType, recordId, recordName } = payload;
+          const cancelled = isPath(url, newContactBackgroundPagePath(prevURL));
+          const saved = !isPath(url, newContactBackgroundPagePath(prevURL));
 
-          // if (cancelled) {
-          //   removeCurrentQueuedCall();
-          // }
-          //
-          // if (saved) {
-          //   const data = removeCurrentQueuedCall();
-          //
-          //   if (!data) return;
-          //
-          //   fireCallInfoEvent(data.call, {
-          //     id: recordId,
-          //     name: formatRecordName(recordName, objectType),
-          //     type: objectType,
-          //   });
-          // }
+          const { objectType, recordId, recordName } = payload;
+
+          const current = queue.find(({ current }) => current);
+
+          logger('onNavigationChange status', { saved, cancelled });
+
+          if (cancelled && current) {
+            // removeCurrentQueuedCall();
+            logger('onNavigationChange cancelled', { current, prevURL, currentURL, payload });
+            removeCallFromQueue(current.call);
+          }
+
+          if (saved && current) {
+            logger('onNavigationChange saved', { current, prevURL, currentURL, payload });
+            fireCallInfoEvent(current.call, {
+              id: recordId,
+              name: formatRecordName(recordName, objectType),
+              type: objectType,
+            });
+          }
 
           queue.forEach(({ call, opened }) => {
             if (!opened) return;
 
-            search(call, (call, SCREEN_POP_DATA, hasData) => {
-              logger('queue search', { hasData, SCREEN_POP_DATA, call });
-              if (!hasData) return;
-              removeCallFromQueue(call);
-            }, true);
+            const id = callId(call);
+            const maybeSaved = saved && current && callId(current.call) === id;
+            const max = maybeSaved ? 20 : 10;
+            const timeout = maybeSaved ? 2500 : 5000;
+
+            if (queuedSearch.has(id)) {
+              clearInterval(queuedSearch.get(id));
+            }
+
+            let count = 0;
+            const interval = setInterval(() => {
+              ++count;
+              search(call, (call, SCREEN_POP_DATA, hasData) => {
+                logger('queue search', { hasData, SCREEN_POP_DATA, call, count });
+
+                if (!hasData && count < max) {
+                  logger(`queue search exit: no data && attempt < ${max}`, { hasData, maybeSaved, SCREEN_POP_DATA, call, count });
+                  return;
+                }
+
+                queuedSearch.delete(id);
+                clearInterval(interval);
+                removeCallFromQueue(call);
+              }, true);
+            }, timeout);
+
+            queuedSearch.set(id, interval);
           });
 
           runQueue();
@@ -204,6 +232,8 @@ setupOpenCti().then(() => {
         calls.clear();
         queue.length = 0;
         sforce.opencti.disableClickToDial({ callback: () => logger('disableClickToDial') });
+        queuedSearch.forEach(clearInterval);
+        queuedSearch.clear();
       });
 
       onCallEvent(call => void 0);
