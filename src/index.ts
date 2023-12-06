@@ -340,7 +340,12 @@ setupOpenCti().then(() => {
   );
 });
 
-const isPath = (url: string, path?: string | null) => new URL(url).pathname === path;
+const isPath = (url: string, path?: string | null) => {
+  const object = new URL(url);
+  const urlPath = object.pathname + object.search;
+
+  return urlPath === path;
+};
 const isNewContactModal = (url: string) => isPath(url, '/lightning/o/Contact/new');
 const newContactBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext');
 
