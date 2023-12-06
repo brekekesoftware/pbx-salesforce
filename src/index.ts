@@ -217,7 +217,7 @@ setupOpenCti().then(() => {
             queuedSearch.set(id, interval);
           });
 
-          runQueue();
+          setTimeout(runQueue, 2500);
         },
       });
 
