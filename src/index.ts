@@ -94,16 +94,6 @@ setupOpenCti().then(() => {
         queue.push({ ...data, opened: true, current: true });
       };
 
-      // const removeCurrentQueuedCall = () => {
-      //   const data = queue.find(({ current }) => current);
-      //
-      //   if (data) {
-      //     removeCallFromQueue(data.call);
-      //   }
-      //
-      //   return data;
-      // };
-
       const search = (call: Call, callback: (call: Call, SCREEN_POP_DATA: any, hasData: boolean) => void, isNew: boolean = false) => {
         logger('search', { call, isNew });
 
@@ -157,29 +147,30 @@ setupOpenCti().then(() => {
             return;
           }
 
-          const prevURLWasNewContact = isNewContactModal(prevURL);
-          if (!prevURLWasNewContact) {
-            logger('onNavigationChange exit: prevURL was not modal', { prevURL });
+          if (!isNewContactModal(prevURL)) {
+            logger('onNavigationChange exit: prevURL was not new contact modal', { prevURL });
+            return;
+          }
+
+          const current = queue.find(({ current }) => current);
+          if (!current) {
+            logger('onNavigationChange exit: no current queue item', { prevURL });
             return;
           }
 
           // if current page [url] was the background page of a dismissed new-contact modal page [prevURL].
           const cancelled = isPath(url, newContactBackgroundPagePath(prevURL));
-          const saved = !isPath(url, newContactBackgroundPagePath(prevURL));
+          const maybeSaved = !isPath(url, newContactBackgroundPagePath(prevURL));
 
-          const { objectType, recordId, recordName } = payload;
-
-          const current = queue.find(({ current }) => current);
-
-          logger('onNavigationChange status', { saved, cancelled });
-
-          if (cancelled && current) {
-            // removeCurrentQueuedCall();
+          if (cancelled) {
             logger('onNavigationChange cancelled', { current, prevURL, currentURL, payload });
-            removeCallFromQueue(current.call);
           }
 
-          if (saved && current) {
+          const { objectType, recordId, recordName } = payload;
+          const hasRecord = !!objectType && !!recordId && !!recordName;
+          const saved = hasRecord && maybeSaved;
+
+          if (saved) {
             logger('onNavigationChange saved', { current, prevURL, currentURL, payload });
             fireCallInfoEvent(current.call, {
               id: recordId,
@@ -188,13 +179,19 @@ setupOpenCti().then(() => {
             });
           }
 
+          if (saved || cancelled) {
+            removeCallFromQueue(current.call);
+          }
+
+          logger('onNavigationChange status', { saved, cancelled });
+
           queue.forEach(({ call, opened }) => {
             if (!opened) return;
 
             const id = callId(call);
-            const maybeSaved = saved && current && callId(current.call) === id;
-            const max = maybeSaved ? 20 : 10;
-            const timeout = maybeSaved ? 2500 : 5000;
+            const prioritize = saved && callId(current.call) === id;
+            const max = prioritize ? 20 : 10;
+            const timeout = prioritize ? 2500 : 5000;
 
             if (queuedSearch.has(id)) {
               clearInterval(queuedSearch.get(id));
@@ -207,7 +204,7 @@ setupOpenCti().then(() => {
                 logger('queue search', { hasData, SCREEN_POP_DATA, call, count });
 
                 if (!hasData && count < max) {
-                  logger(`queue search exit: no data && attempt < ${max}`, { hasData, maybeSaved, SCREEN_POP_DATA, call, count });
+                  logger(`queue search exit: no data && attempt < ${max}`, { hasData, maybeSaved: prioritize, SCREEN_POP_DATA, call, count });
                   return;
                 }
 
