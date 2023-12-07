@@ -365,8 +365,9 @@ const formatDate = (date: Date) => {
 };
 
 const logName = 'brekeke-widget:salesforce';
+const logHosts = ['localhost', '127.0.0.1', 'test2.brekeke.vn'];
 const logger = (...args: unknown[]) => {
-  if (!location.host.startsWith('localhost') && !location.host.startsWith('127.0.0.1')) return;
+  if (!logHosts.includes(location.hostname)) return;
   if (typeof args[0] === 'string' && args[0].includes('error')) {
     console.error(logName, ...args);
     return;
