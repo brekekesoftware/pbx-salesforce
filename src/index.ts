@@ -38,7 +38,6 @@ setupOpenCti().then(() => {
        onContactSelectedEvent,
      }) => {
       const calls = new Map<string, Call>();
-      const callsResult = new Map<string, boolean>();
 
       // add click-to-call listener
       sforce.opencti.onClickToDial({
@@ -73,26 +72,33 @@ setupOpenCti().then(() => {
 
       let currentURL = document.referrer;
 
-      let queue: { call: Call, SCREEN_POP_DATA: never, opened: boolean, current: boolean }[] = [];
-      const queuedSearch = new Map<string, NodeJS.Timer>;
+      const queue = {
+        items: [] as { call: Call, SCREEN_POP_DATA: any, opened: boolean, current: boolean }[],
+        searchIntervals: new Map<string, NodeJS.Timer>,
+        isEmpty: () => queue.items.length === 0,
+        current: () => queue.items.find(({ current }) => current),
+        removeItem: (call: Call) => {
+          queue.items = queue.items.filter(item => callId(call) !== callId(item.call));
+        },
+        reset: () => {
+          queue.items.length = 0;
+          queue.searchIntervals.forEach(clearInterval);
+          queue.searchIntervals.clear();
+        },
+        // open new contact modal for oldest unopened entry, then push it to the back of the queue
+        run: () => {
+          if (queue.items.length === 0) return;
+          const data = queue.items.find(({ opened }) => !opened);
 
-      const removeCallFromQueue = (call: Call) => {
-        queue = queue.filter(value => callId(call) !== callId(value.call));
-      };
+          logger('runQueue', { currentURL, data });
 
-      // open new contact modal for oldest unopened entry, then push it to the back of the queue
-      const runQueue = () => {
-        if (queue.length === 0) return;
-        const data = queue.find(({ opened }) => !opened);
+          if (!data) return;
+          queue.removeItem(data.call);
 
-        logger('runQueue', { currentURL, data });
-
-        if (!data) return;
-        removeCallFromQueue(data.call);
-
-        sforce.opencti.screenPop(data.SCREEN_POP_DATA);
-        queue = queue.map(value => ({ ...value, current: false }));
-        queue.push({ ...data, opened: true, current: true });
+          sforce.opencti.screenPop(data.SCREEN_POP_DATA);
+          queue.items = queue.items.map(value => ({ ...value, current: false }));
+          queue.items.push({ ...data, opened: true, current: true });
+        },
       };
 
       const search = (call: Call, callback: (call: Call, SCREEN_POP_DATA: any, hasData: boolean) => void, isNew: boolean = false) => {
@@ -143,8 +149,8 @@ setupOpenCti().then(() => {
           const prevURL = currentURL;
           currentURL = url;
 
-          if (queue.length === 0 || isNewContactModal(url)) {
-            logger('onNavigationChange exit: empty queue or modal', { queue, url });
+          if (queue.isEmpty() || isNewContactModal(url)) {
+            logger('onNavigationChange exit: empty queue or modal', { queue: queue.items, url });
             return;
           }
 
@@ -153,7 +159,7 @@ setupOpenCti().then(() => {
             return;
           }
 
-          const current = queue.find(({ current }) => current);
+          const current = queue.current();
           if (!current) {
             logger('onNavigationChange exit: no current queue item', { prevURL });
             return;
@@ -181,12 +187,12 @@ setupOpenCti().then(() => {
           }
 
           if (saved || cancelled) {
-            removeCallFromQueue(current.call);
+            queue.removeItem(current.call);
           }
 
           logger('onNavigationChange status', { saved, cancelled });
 
-          queue.forEach(({ call, opened }) => {
+          queue.items.forEach(({ call, opened }) => {
             if (!opened) return;
 
             const id = callId(call);
@@ -194,8 +200,8 @@ setupOpenCti().then(() => {
             const max = prioritize ? 20 : 10;
             const timeout = prioritize ? 2500 : 5000;
 
-            if (queuedSearch.has(id)) {
-              clearInterval(queuedSearch.get(id));
+            if (queue.searchIntervals.has(id)) {
+              clearInterval(queue.searchIntervals.get(id));
             }
 
             let count = 0;
@@ -205,20 +211,26 @@ setupOpenCti().then(() => {
                 logger('queue search', { hasData, SCREEN_POP_DATA, call, count });
 
                 if (!hasData && count < max) {
-                  logger(`queue search exit: no data && attempt < ${max}`, { hasData, maybeSaved: prioritize, SCREEN_POP_DATA, call, count });
+                  logger(`queue search exit: no data && attempt < ${max}`, {
+                    hasData,
+                    maybeSaved: prioritize,
+                    SCREEN_POP_DATA,
+                    call,
+                    count,
+                  });
                   return;
                 }
 
-                queuedSearch.delete(id);
+                queue.searchIntervals.delete(id);
                 clearInterval(interval);
-                removeCallFromQueue(call);
+                queue.removeItem(call);
               }, true);
             }, timeout);
 
-            queuedSearch.set(id, interval);
+            queue.searchIntervals.set(id, interval);
           });
 
-          setTimeout(runQueue, 2500);
+          setTimeout(queue.run, 2500);
         },
       });
 
@@ -228,10 +240,8 @@ setupOpenCti().then(() => {
 
       onLoggedOutEvent(() => {
         calls.clear();
-        queue.length = 0;
+        queue.reset();
         sforce.opencti.disableClickToDial({ callback: () => logger('disableClickToDial') });
-        queuedSearch.forEach(clearInterval);
-        queuedSearch.clear();
       });
 
       onCallEvent(call => void 0);
@@ -255,12 +265,11 @@ setupOpenCti().then(() => {
 
           // put new contacts in queue so that they can be processed on navigation changes.
           if (isNewContact) {
-            canPopNew = queue.filter(({ opened }) => !opened).length === 0 && !isNewContactModal(currentURL);
-            // @ts-ignore
-            queue.push({ call, SCREEN_POP_DATA, opened: canPopNew, current: canPopNew });
+            canPopNew = queue.items.filter(({ opened }) => !opened).length === 0 && !isNewContactModal(currentURL);
+            queue.items.push({ call, SCREEN_POP_DATA, opened: canPopNew, current: canPopNew });
           }
 
-          logger('onCallUpdatedEvent', { isNewContact, canPopNew, queue, call });
+          logger('onCallUpdatedEvent', { isNewContact, canPopNew, queue: queue.items, call });
 
           // don't screen pop if a new contact modal is currently opened or queued.
           if (isNewContact && !canPopNew) return;
