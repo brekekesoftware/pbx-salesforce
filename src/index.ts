@@ -363,7 +363,7 @@ const isPath = (url: string, path: string | RegExp, withQuery = true) => {
 };
 
 const contacts = ['Account', 'Contact', 'Lead'].join('|');
-const regex = new RegExp(`/\/lightning\/o\/(?:${contacts})\/new/`);
+const regex = new RegExp(`\/lightning\/o\/(?:${contacts})\/new`);
 const isNewContactModal = (url: string) => isPath(url, regex, false);
 
 const newContactBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext') ?? '';
