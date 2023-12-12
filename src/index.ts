@@ -149,13 +149,13 @@ setupOpenCti().then(() => {
           const prevURL = currentURL;
           currentURL = url;
 
-          if (queue.isEmpty() || isNewContactModal(url)) {
+          if (queue.isEmpty() || isNewRecordModal(url)) {
             logger('onNavigationChange exit: empty queue or modal', { queue: queue.items, url });
             return;
           }
 
-          if (!isNewContactModal(prevURL)) {
-            logger('onNavigationChange exit: prevURL was not new contact modal', { prevURL });
+          if (!isNewRecordModal(prevURL)) {
+            logger('onNavigationChange exit: prevURL was not new record modal', { prevURL });
             return;
           }
 
@@ -166,8 +166,8 @@ setupOpenCti().then(() => {
           }
 
           // if current page [url] was the background page of a dismissed new-contact modal page [prevURL].
-          const cancelled = isPath(url, newContactBackgroundPagePath(prevURL));
-          const maybeSaved = !isPath(url, newContactBackgroundPagePath(prevURL));
+          const cancelled = isPath(url, newRecordBackgroundPagePath(prevURL));
+          const maybeSaved = !isPath(url, newRecordBackgroundPagePath(prevURL));
 
           if (cancelled) {
             logger('onNavigationChange cancelled', { current, prevURL, currentURL, payload });
@@ -265,7 +265,7 @@ setupOpenCti().then(() => {
 
           // put new contacts in queue so that they can be processed on navigation changes.
           if (isNewContact) {
-            canPopNew = queue.items.filter(({ opened }) => !opened).length === 0 && !isNewContactModal(currentURL);
+            canPopNew = queue.items.filter(({ opened }) => !opened).length === 0 && !isNewRecordModal(currentURL);
             queue.items.push({ call, SCREEN_POP_DATA, opened: canPopNew, current: canPopNew });
           }
 
@@ -362,11 +362,11 @@ const isPath = (url: string, path: string | RegExp, withQuery = true) => {
   return path.test(urlPath);
 };
 
-const contactTypes = ['Account', 'Contact', 'Lead'];
-const newContactPathRegex = new RegExp(`/lightning/o/(?:${contactTypes.join('|')})/new`);
-const isNewContactModal = (url: string) => isPath(url, newContactPathRegex, false);
+const recordTypes = ['Account', 'Contact', 'Lead'];
+const newRecordPathRegex = new RegExp(`/lightning/o/(?:${recordTypes.join('|')})/new`);
+const isNewRecordModal = (url: string) => isPath(url, newRecordPathRegex, false);
 
-const newContactBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext') ?? '';
+const newRecordBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext') ?? '';
 
 const formatRecordName = (name: string, type: string) => `${name} [${type}]`;
 
