@@ -347,7 +347,7 @@ setupOpenCti().then(() => {
   );
 });
 
-const isPath = (url: string, path: string | string[], withQuery = true) => {
+const isPath = (url: string, path: string | RegExp, withQuery = true) => {
   const object = new URL(url);
   let urlPath = object.pathname;
 
@@ -355,12 +355,14 @@ const isPath = (url: string, path: string | string[], withQuery = true) => {
     urlPath += object.search;
   }
 
-  const p = Array.isArray(path) ? path : [path];
+  if (typeof path === 'string') {
+    return urlPath === path;
+  }
 
-  return p.some(value => value === urlPath);
+  return path.test(urlPath);
 };
-const newContactPaths = ['Account', 'Contact', 'Lead'].map(type => `/lightning/o/${type}/new`);
-const isNewContactModal = (url: string) => isPath(url, newContactPaths, false);
+const regex = /\/lightning\/o\/(?:Account|Contact|Lead)\/new/;
+const isNewContactModal = (url: string) => isPath(url, regex, false);
 const newContactBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext') ?? '';
 
 const formatRecordName = (name: string, type: string) => `${name} [${type}]`;
