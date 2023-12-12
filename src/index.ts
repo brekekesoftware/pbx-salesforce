@@ -359,7 +359,7 @@ const isPath = (url: string, path: string | string[], withQuery = true) => {
 
   return p.some(value => value === urlPath);
 };
-const isNewContactModal = (url: string) => isPath(url, ['/lightning/o/Contact/new', '/lightning/o/Lead/new'], false);
+const isNewContactModal = (url: string) => isPath(url, ['/lightning/o/Account/new', '/lightning/o/Contact/new', '/lightning/o/Lead/new'], false);
 const newContactBackgroundPagePath = (url: string) => new URL(url).searchParams.get('backgroundContext') ?? '';
 
 const formatRecordName = (name: string, type: string) => `${name} [${type}]`;
