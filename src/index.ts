@@ -230,7 +230,10 @@ setupOpenCti().then(() => {
             queue.searchIntervals.set(id, interval);
           });
 
-          setTimeout(queue.run, 2500);
+          // screen pop for queued new contact often fails when current contact is saved unless there's a large delay.
+          const timeout = saved ? 2500 : 500;
+
+          setTimeout(queue.run, timeout);
         },
       });
 
