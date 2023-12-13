@@ -48,7 +48,7 @@ setupOpenCti().then(() => {
       });
 
       fireConfigEvent({
-        version: 'SF1',
+        version: 'SF2',
         logInputs: [
           {
             label: 'Subject',
